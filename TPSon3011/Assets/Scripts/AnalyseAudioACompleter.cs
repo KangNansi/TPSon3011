@@ -242,14 +242,15 @@ public class AnalyseAudioACompleter : MonoBehaviour {
         int nextMaxInd = -1;
         for(int i = 0; i < localMax.Count; i++)
         {
-            if(localMax[i].index!=correl.Length/2 && localMax[i].value > nextMax && localMax[i].value > correlOrigin*0.55f)
+            if(localMax[i].index!=correl.Length/2 && localMax[i].value > nextMax && localMax[i].value > correlOrigin*0.4f)
             {
                 nextMax = localMax[i].value;
                 nextMaxInd = localMax[i].index;
             }
         }
         int dist = Mathf.Abs(correl.Length / 2 - nextMaxInd);
-        if (nextMaxInd == -1)
+        Debug.Log("cororigin:" + correlOrigin);
+        if (nextMaxInd == -1 || correlOrigin<0.00001)
             return 0;
         return (AudioSettings.outputSampleRate / (float)dist);
     }
