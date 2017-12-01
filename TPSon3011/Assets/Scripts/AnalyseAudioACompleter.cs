@@ -11,15 +11,29 @@ public class AnalyseAudioACompleter : MonoBehaviour {
 	private const int NB_SAMPLES = 512;     // ??
     private const float REFVALUE = 0.00045f;
     public int NB_TRAMES = 50;
+    public int pitchLissage = 10;
     private int current = 0;
 
     public float strength = 0.1f;
+    public float correlStrength = 3f;
 
     private float[] trame;
     private float[] spectre;
     private float spmax = 0;
     private List<float> volt = new List<float>();
     private List<float> med = new List<float>();
+    private List<float> pitchBuffer = new List<float>();
+
+    private struct localMaximum
+    {
+        public float value;
+        public int index;
+        public localMaximum(int ind, float val)
+        {
+            value = val;
+            index = ind;
+        }
+    }
 	
 	// ===============================================
 	// =========== METHODES START ET UPDATE ==========
@@ -88,8 +102,20 @@ public class AnalyseAudioACompleter : MonoBehaviour {
             fres = med[(med.Count / 2)];
         }
         float r = GetFundamental(NB_SAMPLES*16);
-        transform.position = new Vector3(0, r * strength, 0);
-        Debug.Log(r);
+        float pitch = GetPitch(trame);
+        pitchBuffer.Add(pitch);
+        while(pitchBuffer.Count >= pitchLissage)
+        {
+            pitchBuffer.RemoveAt(0);
+        }
+        float smoothPitch = 0;
+        foreach(float p in pitchBuffer)
+        {
+            smoothPitch += p;
+        }
+        smoothPitch /= (float)pitchBuffer.Count;
+        Debug.Log("Pitch:" + smoothPitch);
+        transform.position = new Vector3(0, smoothPitch * strength, 0);
 	}
 
     private float GetRMS(float[] tr, int nb_samples)
@@ -123,14 +149,17 @@ public class AnalyseAudioACompleter : MonoBehaviour {
             }
         }
         spmax = max;
-        DrawSpectrum(spectre, max);
+        //DrawSpectrum(spectre, max);
+
+        DrawCorrel(trame);
         return ind * (AudioSettings.outputSampleRate / 2) / n;
 
     }
 
     private void OnPostRender()
     {
-        DrawSpectrum(spectre, spmax);
+        //DrawSpectrum(spectre, spmax);
+        DrawCorrel(trame);
     }
 
     private void DrawSpectrum(float[] t, float max)
@@ -150,6 +179,79 @@ public class AnalyseAudioACompleter : MonoBehaviour {
             Debug.DrawLine(last, n, new Color((1-(n.y/10f)), (n.y / 10f), 0));
             last = n;
         }
+    }
+
+    private float correl(float[] t, int lag)
+    {
+        float res = 0;
+        for(int i = Mathf.Max(0,0-lag); i < Mathf.Min(t.Length, t.Length-lag); i++)
+        {
+            res += t[i] * t[i + lag];
+        }
+        return res;
+    }
+
+    private float[] GetCorrel(float[] t)
+    {
+        float[] res = new float[t.Length * 2];
+        for(int i = -t.Length; i < t.Length; i++)
+        {
+            res[i + t.Length] = correl(t, i);
+        }
+        return res;
+    }
+
+    private List<localMaximum> GetLocalMaximum(float[] correl)
+    {
+        List<localMaximum> maxs = new List<localMaximum>();
+        for(int i = 0; i < correl.Length; i++)
+        {
+            if (i > 0 && correl[i - 1] > correl[i])
+                continue;
+            if (i < correl.Length-1 && correl[i + 1] > correl[i])
+                continue;
+            maxs.Add(new localMaximum(i, correl[i]));
+        }
+        return maxs;
+    }
+
+    private void DrawCorrel(float[] t)
+    {
+        Vector3 last = Camera.main.ScreenToWorldPoint(Vector3.zero);
+        last.z = 0;
+        float mx = Mathf.Log(t.Length);
+        for (int i = -t.Length; i < t.Length; i++)
+        {
+            float x = i/(float)(t.Length*2) + 0.5f;
+            float y = correl(t,i)*correlStrength;
+            x = Mathf.Clamp(x, 0, 1);
+            y = Mathf.Clamp(y, 0, 1);
+            Vector3 n = Camera.main.ScreenToWorldPoint(new Vector3(x * Camera.main.pixelWidth, y * Camera.main.pixelHeight));
+            n.z = 0;
+            Debug.DrawLine(last, n, new Color((1 - (n.y / 10f)), (n.y / 10f), 0));
+            last = n;
+        }
+    }
+
+    private float GetPitch(float[] t)
+    {
+        float[] correl = GetCorrel(t);
+        List<localMaximum> localMax = GetLocalMaximum(correl);
+        float correlOrigin = correl[correl.Length / 2];
+        float nextMax = 0;
+        int nextMaxInd = -1;
+        for(int i = 0; i < localMax.Count; i++)
+        {
+            if(localMax[i].index!=correl.Length/2 && localMax[i].value > nextMax && localMax[i].value > correlOrigin*0.55f)
+            {
+                nextMax = localMax[i].value;
+                nextMaxInd = localMax[i].index;
+            }
+        }
+        int dist = Mathf.Abs(correl.Length / 2 - nextMaxInd);
+        if (nextMaxInd == -1)
+            return 0;
+        return (AudioSettings.outputSampleRate / (float)dist);
     }
 	
 	
