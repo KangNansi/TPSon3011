@@ -151,7 +151,7 @@ public class AnalyseAudioACompleter : MonoBehaviour {
         spmax = max;
         //DrawSpectrum(spectre, max);
 
-        DrawCorrel(trame);
+        DrawOnScreen(trame);
         return ind * (AudioSettings.outputSampleRate / 2) / n;
 
     }
@@ -181,7 +181,7 @@ public class AnalyseAudioACompleter : MonoBehaviour {
         }
     }
 
-    private float correl(float[] t, int lag)
+    private float getCorrelPoint(float[] t, int lag)
     {
         float res = 0;
         for(int i = Mathf.Max(0,0-lag); i < Mathf.Min(t.Length, t.Length-lag); i++)
@@ -194,9 +194,10 @@ public class AnalyseAudioACompleter : MonoBehaviour {
     private float[] GetCorrel(float[] t)
     {
         float[] res = new float[t.Length * 2];
+        float corref = getCorrelPoint(t, 0);
         for(int i = -t.Length; i < t.Length; i++)
         {
-            res[i + t.Length] = correl(t, i);
+            res[i + t.Length] = getCorrelPoint(t, i)/corref;
         }
         return res;
     }
@@ -220,10 +221,11 @@ public class AnalyseAudioACompleter : MonoBehaviour {
         Vector3 last = Camera.main.ScreenToWorldPoint(Vector3.zero);
         last.z = 0;
         float mx = Mathf.Log(t.Length);
-        for (int i = -t.Length; i < t.Length; i++)
+        float[] correl = GetCorrel(t);
+        for (int i = 0; i < correl.Length; i++)
         {
-            float x = i/(float)(t.Length*2) + 0.5f;
-            float y = correl(t,i)*correlStrength;
+            float x = i/(float)(correl.Length);
+            float y = correl[i]*correlStrength;
             x = Mathf.Clamp(x, 0, 1);
             y = Mathf.Clamp(y, 0, 1);
             Vector3 n = Camera.main.ScreenToWorldPoint(new Vector3(x * Camera.main.pixelWidth, y * Camera.main.pixelHeight));
@@ -233,16 +235,35 @@ public class AnalyseAudioACompleter : MonoBehaviour {
         }
     }
 
+    private void DrawOnScreen(float[] t)
+    {
+        Vector3 last = Camera.main.ScreenToWorldPoint(Vector3.zero);
+        last.z = 0;
+        float mx = Mathf.Log(t.Length);
+        float[] correl = GetCorrel(t);
+        for (int i = 0; i < Camera.main.pixelWidth; i++)
+        {
+            float x = i;
+            float y = correl[(int)((i/ (float)Camera.main.pixelWidth)*correl.Length)] * correlStrength;
+            x = Mathf.Clamp(x, 0, 1);
+            y = Mathf.Clamp(y, 0, 1);
+            Vector3 n = Camera.main.ScreenToWorldPoint(new Vector3(x, y * Camera.main.pixelHeight));
+            n.z = 0;
+            Debug.DrawLine(new Vector3(x,0,0), n, new Color((1 - (n.y / 10f)), (n.y / 10f), 0));
+            last = n;
+        }
+    }
+
     private float GetPitch(float[] t)
     {
         float[] correl = GetCorrel(t);
         List<localMaximum> localMax = GetLocalMaximum(correl);
-        float correlOrigin = correl[correl.Length / 2];
+        float correlOrigin = getCorrelPoint(t,0);
         float nextMax = 0;
         int nextMaxInd = -1;
         for(int i = 0; i < localMax.Count; i++)
         {
-            if(localMax[i].index!=correl.Length/2 && localMax[i].value > nextMax && localMax[i].value > correlOrigin*0.4f)
+            if(localMax[i].index!=correl.Length/2 && localMax[i].value > nextMax && localMax[i].value > 0.55f)
             {
                 nextMax = localMax[i].value;
                 nextMaxInd = localMax[i].index;
@@ -250,7 +271,8 @@ public class AnalyseAudioACompleter : MonoBehaviour {
         }
         int dist = Mathf.Abs(correl.Length / 2 - nextMaxInd);
         Debug.Log("cororigin:" + correlOrigin);
-        if (nextMaxInd == -1 || correlOrigin<0.00001)
+        Debug.Log("nextMaxInd" + nextMaxInd);
+        if (nextMaxInd == -1)
             return 0;
         return (AudioSettings.outputSampleRate / (float)dist);
     }
