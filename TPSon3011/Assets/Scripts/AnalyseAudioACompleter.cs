@@ -245,11 +245,13 @@ public class AnalyseAudioACompleter : MonoBehaviour {
         {
             float x = i;
             float y = correl[(int)((i/ (float)Camera.main.pixelWidth)*correl.Length)] * correlStrength;
-            x = Mathf.Clamp(x, 0, 1);
+            //x = Mathf.Clamp(x, 0, 1);
             y = Mathf.Clamp(y, 0, 1);
             Vector3 n = Camera.main.ScreenToWorldPoint(new Vector3(x, y * Camera.main.pixelHeight));
             n.z = 0;
-            Debug.DrawLine(new Vector3(x,0,0), n, new Color((1 - (n.y / 10f)), (n.y / 10f), 0));
+            Vector3 n2 = Camera.main.ScreenToWorldPoint(new Vector3(x, 0));
+            n2.z = 0;
+            Debug.DrawLine(n2, n, new Color((1 - (n.y / 10f)), (n.y / 10f), 0));
             last = n;
         }
     }
